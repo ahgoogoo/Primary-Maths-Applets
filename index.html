@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Circle Area Applet</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #ecf0f1; margin: 0; padding: 10px; }
+        
+        /* Fixed size for reliability */
+        #canvas { 
+            background: white; 
+            border: 3px solid #2c3e50; 
+            border-radius: 8px; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            touch-action: none; 
+            display: block;
+            margin: 10px auto;
+        }
+
+        .menu { 
+            background: #fff; 
+            padding: 15px; 
+            border-radius: 10px; 
+            display: inline-block; 
+            border: 1px solid #bdc3c7;
+            width: 780px;
+        }
+
+        .btn-row { margin-bottom: 10px; }
+
+        button { 
+            padding: 15px 20px; 
+            font-size: 18px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            border: none; 
+            border-radius: 8px; 
+            margin: 5px;
+            color: white;
+        }
+
+        .add-btn { background: #3498db; }
+        .rot-btn { background: #27ae60; display: none; }
+        .del-btn { background: #e74c3c; display: none; }
+        .clear-btn { background: #95a5a6; }
+
+        .hint-text { font-size: 16px; color: #34495e; font-weight: bold; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="menu">
+        <div class="btn-row">
+            <button class="add-btn" onclick="addPiece(2)">+ 1/2</button>
+            <button class="add-btn" onclick="addPiece(4)">+ 1/4</button>
+            <button class="add-btn" onclick="addPiece(8)">+ 1/8</button>
+            <button class="clear-btn" onclick="resetCanvas()">Clear Field</button>
+        </div>
+        
+        <div id="editControls">
+            <button id="rotBtn" class="rot-btn" onclick="rotateSelected()">Rotate 45°</button>
+            <button id="delBtn" class="del-btn" onclick="deleteSelected()">Delete Piece</button>
+        </div>
+        <div class="hint-text" id="statusHint">Tap a piece to start</div>
+    </div>
+
+    <canvas id="canvas" width="800" height="550"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const radius = 100; // Larger pieces for easier handling
+        let pieces = [];
+        let selectedPiece = null;
+        let draggingPiece = null;
+        let offset = { x: 0, y: 0 };
+
+        class Piece {
+            constructor(frac, x, y) {
+                this.frac = frac;
+                this.x = x;
+                this.y = y;
+                this.angle = 0;
+                this.arc = (2 * Math.PI) / frac;
+            }
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angle);
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, radius, 0, this.arc);
+                ctx.closePath();
+                ctx.fillStyle = (this === selectedPiece) ? '#f1c40f' : '#3498db';
+                ctx.globalAlpha = 0.7;
+                ctx.fill();
+                ctx.strokeStyle = '#2c3e50';
+                ctx.lineWidth = (this === selectedPiece) ? 5 : 2;
+                ctx.stroke();
+                // Pivot point
+                ctx.beginPath();
+                ctx.arc(0,0, 5, 0, Math.PI*2);
+                ctx.fillStyle = '#2c3e50';
+                ctx.fill();
+                ctx.restore();
+            }
+            contains(px, py) {
+                const dx = px - this.x;
+                const dy = py - this.y;
+                if (Math.sqrt(dx*dx + dy*dy) > radius) return false;
+                let a = Math.atan2(dy, dx) - this.angle;
+                while (a < 0) a += Math.PI * 2;
+                while (a > Math.PI * 2) a -= Math.PI * 2;
+                return a >= 0 && a <= this.arc;
+            }
+        }
+
+        function addPiece(n) {
+            const p = new Piece(n, canvas.width/2, canvas.height/2);
+            pieces.push(p);
+            updateSelection(p);
+            render();
+        }
+
+        function updateSelection(p) {
+            selectedPiece = p;
+            const show = p ? 'inline-block' : 'none';
+            document.getElementById('rotBtn').style.display = show;
+            document.getElementById('delBtn').style.display = show;
+            document.getElementById('statusHint').innerText = p ? "Selected: " + (p.frac==2?"Half":p.frac==4?"Quarter":"Eighth") : "Tap a piece to start";
+        }
+
+        function rotateSelected() {
+            if (selectedPiece) { selectedPiece.angle += Math.PI / 4; render(); }
+        }
+
+        function deleteSelected() {
+            if (selectedPiece) {
+                pieces = pieces.filter(x => x !== selectedPiece);
+                updateSelection(null);
+                render();
+            }
+        }
+
+        function resetCanvas() {
+            if (confirm("Clear the field?")) {
+                pieces = [];
+                updateSelection(null);
+                render();
+            }
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Grid
+            ctx.strokeStyle = '#f1f1f1';
+            for(let i=0; i<canvas.width; i+=50) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); ctx.stroke(); }
+            for(let j=0; j<canvas.height; j+=50) { ctx.beginPath(); ctx.moveTo(0,j); ctx.lineTo(canvas.width,j); ctx.stroke(); }
+            pieces.forEach(p => p.draw());
+        }
+
+        function getMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+
+        function start(e) {
+            const pos = getMousePos(e);
+            let hit = false;
+            for (let i = pieces.length - 1; i >= 0; i--) {
+                if (pieces[i].contains(pos.x, pos.y)) {
+                    draggingPiece = pieces[i];
+                    updateSelection(draggingPiece);
+                    pieces.splice(i, 1);
+                    pieces.push(draggingPiece);
+                    offset.x = pos.x - draggingPiece.x;
+                    offset.y = pos.y - draggingPiece.y;
+                    hit = true;
+                    break;
+                }
+            }
+            if (!hit) updateSelection(null);
+            render();
+        }
+
+        function move(e) {
+            if (draggingPiece) {
+                const pos = getMousePos(e);
+                draggingPiece.x = pos.x - offset.x;
+                draggingPiece.y = pos.y - offset.y;
+                render();
+            }
+        }
+
+        function stop() { draggingPiece = null; }
+
+        canvas.addEventListener('mousedown', start);
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', stop);
+
+        canvas.addEventListener('touchstart', (e) => { start(e); e.preventDefault(); }, {passive: false});
+        window.addEventListener('touchmove', (e) => { move(e); e.preventDefault(); }, {passive: false});
+        window.addEventListener('touchend', stop);
+
+        render();
+    </script>
+</body>
+</html>
