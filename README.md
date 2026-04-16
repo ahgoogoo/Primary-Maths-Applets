@@ -1,1 +1,1 @@
-#Manupulatuve of circle parts for area of circle
+#Manupilative of circle parts for area of circle
